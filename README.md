@@ -1,100 +1,232 @@
-# PayVelix
-# PayVelix
+# PayVelix Client
 
-PayVelix is a .NET SDK for working with the PayVelix payment API.
+PayVelix Client is a .NET 8 SDK for integrating applications with the PayVelix payment API. It provides a small typed wrapper around the payment endpoints and is designed to work with `HttpClientFactory` and Microsoft Dependency Injection.
 
-The SDK currently supports:
+## Features
 
-- Create Payment
-- Verify Payment
+- Create payments through `/api/Payments/Create`
+- Verify payments through `/api/Payments/{paymentId}/Verify`
+- Send the API key with the `X-Api-Key` header
+- Serialize and deserialize JSON with camelCase property names
+- Preserve unknown response fields in `AdditionalData`
+- Convert unsuccessful API responses to `PayVelixApiException`
 
-It uses the official PayVelix API base URL:
-
-```text
-https://api.payvelix.com
-```
-
-Authentication is sent with the `X-Api-Key` header. The SDK does not use
-`Authorization: Bearer`.
-
-## Projects
+## Project Structure
 
 ```text
-PayVelix.Contracts  Public request/response DTOs and reusable exceptions
-PayVelix            SDK implementation, HTTP client, options, DI
-PayVelix.Tests      Unit tests
+PayVelix.Client/
+|- PayVelix/              # Main client, DI setup, and HTTP implementation
+|- PayVelix.Contracts/    # DTOs, enums, and shared exceptions
+|- PayVelix.Tests/        # xUnit tests
+`- README.md
 ```
 
 ## Requirements
 
-- .NET 8.0 or later
-- A PayVelix API key
+- .NET SDK 8.0 or later
+- A valid PayVelix API key
 
-## Installation
+## Local Usage
 
-If you are consuming the SDK from this solution directly, add project
-references to both the SDK and contracts projects:
+During development, reference the projects from your consuming application:
 
 ```powershell
-dotnet add YourApp.csproj reference path\to\PayVelix\PayVelix.csproj
-dotnet add YourApp.csproj reference path\to\PayVelix.Contracts\PayVelix.Contracts.csproj
+dotnet add <YourProject>.csproj reference .\PayVelix\PayVelix.csproj
+dotnet add <YourProject>.csproj reference .\PayVelix.Contracts\PayVelix.Contracts.csproj
 ```
 
-The SDK uses `Microsoft.Extensions.DependencyInjection` and `IHttpClientFactory`
-for configuration.
+If this SDK is later published as a NuGet package, install the package instead of using local project references.
 
 ## Configuration
 
-Register the SDK with dependency injection:
+In ASP.NET Core or any application that uses `IServiceCollection`:
 
 ```csharp
-using Microsoft.Extensions.DependencyInjection;
 using PayVelix.DependencyInjection;
 
-var services = new ServiceCollection();
-
-services.AddPayVelix(options =>
+builder.Services.AddPayVelix(options =>
 {
-    options.ApiKey = Environment.GetEnvironmentVariable("PAYVELIX_API_KEY")
-        ?? throw new InvalidOperationException("PAYVELIX_API_KEY is not set.");
+    options.ApiKey = builder.Configuration["PayVelix:ApiKey"]
+        ?? throw new InvalidOperationException("PayVelix API key is missing.");
+
+    options.BaseUrl = builder.Configuration["PayVelix:BaseUrl"]
+        ?? "https://api.payvelix.com";
+
+    options.Timeout = TimeSpan.FromSeconds(30);
 });
 ```
 
 Available options:
 
-```csharp
-public sealed class PayVelixOptions
+| Option | Default | Description |
+| --- | --- | --- |
+| `ApiKey` | `string.Empty` | PayVelix API key. An empty value causes client creation to fail. |
+| `BaseUrl` | `https://api.payvelix.com` | Base URL of the PayVelix API. |
+| `Timeout` | `30s` | HTTP request timeout. |
+
+Example `appsettings.json`:
+
+```json
 {
-    public string ApiKey { get; set; } = string.Empty;
-    public string BaseUrl { get; set; } = "https://api.payvelix.com";
-    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
+  "PayVelix": {
+    "ApiKey": "pv_sandbox_test_key",
+    "BaseUrl": "https://api.payvelix.com"
+  }
 }
 ```
 
-Never commit real API keys to source control. Prefer environment variables,
-user secrets, or your deployment platform's secret store.
-
-## Create Payment
-
-Endpoint used by the SDK:
-
-```text
-POST /api/Payments/Create
-```
-
-Example:
+## Create a Payment
 
 ```csharp
-using Microsoft.Extensions.DependencyInjection;
 using PayVelix;
 using PayVelix.Contracts.Payments;
-using PayVelix.DependencyInjection;
 
-var serviceProvider = services.BuildServiceProvider();
-var payVelix = serviceProvider.GetRequiredService<IPayVelixClient>();
-
-var payment = await payVelix.Payments.CreateAsync(new CreatePaymentRequest
+public sealed class CheckoutService
 {
-    Amount = 1,
-    Currency = "USDT",
-    ReturnUrl = "https://example.com/payment/return",
+    private readonly IPayVelixClient _payVelix;
+
+    public CheckoutService(IPayVelixClient payVelix)
+    {
+        _payVelix = payVelix;
+    }
+
+    public async Task<CreatePaymentResponse> CreatePaymentAsync(
+        string orderId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _payVelix.Payments.CreateAsync(
+            new CreatePaymentRequest
+            {
+                Amount = 25.50m,
+                Currency = "USD",
+                ReturnUrl = $"https://example.com/payments/return?orderId={orderId}",
+                WebhookUrl = "https://example.com/webhooks/payvelix",
+                CallbackParams = new Dictionary<string, string>
+                {
+                    ["orderId"] = orderId
+                }
+            },
+            cancellationToken);
+    }
+}
+```
+
+`Amount` must be greater than zero. Otherwise, `ArgumentException` is thrown.
+
+## Verify a Payment
+
+```csharp
+using PayVelix;
+using PayVelix.Contracts.Payments;
+
+public sealed class PaymentVerificationService
+{
+    private readonly IPayVelixClient _payVelix;
+
+    public PaymentVerificationService(IPayVelixClient payVelix)
+    {
+        _payVelix = payVelix;
+    }
+
+    public async Task<bool> IsPaidAsync(
+        string paymentId,
+        CancellationToken cancellationToken = default)
+    {
+        var payment = await _payVelix.Payments.VerifyAsync(
+            paymentId,
+            cancellationToken);
+
+        return string.Equals(
+            payment.Status,
+            PaymentStatus.Paid.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+}
+```
+
+`paymentId` must not be null, empty, or whitespace. Otherwise, `ArgumentException` is thrown.
+
+## Models
+
+### `CreatePaymentRequest`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `ReturnUrl` | `string?` | URL where the customer is redirected after payment. |
+| `Amount` | `decimal` | Payment amount. Must be greater than zero. |
+| `Currency` | `string?` | Currency code. |
+| `WebhookUrl` | `string?` | URL that receives PayVelix webhook callbacks. |
+| `CallbackParams` | `Dictionary<string, string>?` | Custom parameters for tracking orders or callback context. |
+
+### `CreatePaymentResponse`
+
+| Property | Type |
+| --- | --- |
+| `PaymentId` | `string?` |
+| `Amount` | `decimal` |
+| `PaymentLink` | `string?` |
+| `ExpiresAt` | `DateTimeOffset?` |
+| `AdditionalData` | `Dictionary<string, JsonElement>?` |
+
+### `VerifyPaymentResponse`
+
+| Property | Type |
+| --- | --- |
+| `PaymentId` | `string?` |
+| `Amount` | `decimal` |
+| `PaidAmount` | `decimal` |
+| `FeeAmount` | `decimal` |
+| `ExpectedAmount` | `decimal` |
+| `MerchantReceivableAmount` | `decimal` |
+| `Currency` | `string?` |
+| `Network` | `string?` |
+| `Status` | `string?` |
+| `ExpiresAt` | `DateTimeOffset?` |
+| `AdditionalData` | `Dictionary<string, JsonElement>?` |
+
+## Error Handling
+
+For unsuccessful HTTP responses, the client throws `PayVelixApiException`:
+
+```csharp
+using PayVelix.Contracts.Common;
+
+try
+{
+    var payment = await payVelix.Payments.VerifyAsync(paymentId, cancellationToken);
+}
+catch (PayVelixApiException ex)
+{
+    logger.LogWarning(
+        "PayVelix request failed. StatusCode: {StatusCode}, ErrorCode: {ErrorCode}, Body: {Body}",
+        ex.StatusCode,
+        ex.ErrorCode,
+        ex.ResponseBody);
+}
+```
+
+Useful exception properties:
+
+| Property | Description |
+| --- | --- |
+| `StatusCode` | HTTP status code returned by the API. |
+| `ErrorCode` | PayVelix error code, when available. |
+| `ResponseBody` | Raw response body for troubleshooting. |
+
+The client supports both direct error responses such as `{"code":"...","message":"..."}` and nested error responses such as `{"error":{...}}`.
+
+## Build and Test
+
+```powershell
+dotnet restore .\PayVelix\PayVelix.sln
+dotnet build .\PayVelix\PayVelix.sln
+dotnet test .\PayVelix\PayVelix.sln
+```
+
+## Implementation Notes
+
+- `IPayVelixClient` is registered as scoped.
+- `IPayVelixPaymentsClient` is registered with `AddHttpClient`.
+- `Accept: application/json` is added automatically.
+- `X-Api-Key` is built from `PayVelixOptions.ApiKey`.
+- Empty or invalid successful API responses are converted to `PayVelixApiException`.
