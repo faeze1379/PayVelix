@@ -17,6 +17,7 @@ PayVelix Client is a .NET 8 SDK for integrating applications with the PayVelix p
 PayVelix.Client/
 |- PayVelix/              # Main client, DI setup, and HTTP implementation
 |- PayVelix.Contracts/    # DTOs, enums, and shared exceptions
+|- PayVelix.SandboxConsole/ # Manual sandbox smoke-test console app
 |- PayVelix.Tests/        # xUnit tests
 `- README.md
 ```
@@ -73,6 +74,51 @@ Example `appsettings.json`:
     "BaseUrl": "https://api.payvelix.com"
   }
 }
+```
+
+## Sandbox Console Manual Test
+
+The repository includes `PayVelix.SandboxConsole`, a small console app for manually testing a sandbox API key against the PayVelix API. It creates a test payment and can immediately verify the returned `paymentId`.
+
+Set the API key as an environment variable so it is not stored in source code or shell history:
+
+```powershell
+$env:PAYVELIX_API_KEY = "your_sandbox_api_key"
+```
+
+Run the console app:
+
+```powershell
+dotnet run --project .\PayVelix.SandboxConsole
+```
+
+By default, the console app uses:
+
+| Setting | Environment variable | Default |
+| --- | --- | --- |
+| API key | `PAYVELIX_API_KEY` | Required |
+| Base URL | `PAYVELIX_BASE_URL` | `https://api.payvelix.com` |
+| Amount | `PAYVELIX_AMOUNT` | `1` |
+| Currency | `PAYVELIX_CURRENCY` | `USD` |
+| Return URL | `PAYVELIX_RETURN_URL` | `https://example.com/payvelix/return` |
+| Webhook URL | `PAYVELIX_WEBHOOK_URL` | Empty |
+
+You can also override values with command-line options:
+
+```powershell
+dotnet run --project .\PayVelix.SandboxConsole -- --amount 5 --currency USD --base-url https://api.payvelix.com
+```
+
+To create a payment without running the verification prompt:
+
+```powershell
+dotnet run --project .\PayVelix.SandboxConsole -- --skip-verify
+```
+
+To see all available options:
+
+```powershell
+dotnet run --project .\PayVelix.SandboxConsole -- --help
 ```
 
 ## Create a Payment
