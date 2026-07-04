@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PayVelix.Tests", "..\PayVel
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PayVelix.Contracts", "..\PayVelix.Contracts\PayVelix.Contracts.csproj", "{252A94CF-3666-4A03-955F-280E33317B1A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PayVelix.SandboxConsole", "..\PayVelix.SandboxConsole\PayVelix.SandboxConsole.csproj", "{D314B4B6-FDBA-4C2F-B193-202CA0AAD9A5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{252A94CF-3666-4A03-955F-280E33317B1A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{252A94CF-3666-4A03-955F-280E33317B1A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{252A94CF-3666-4A03-955F-280E33317B1A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D314B4B6-FDBA-4C2F-B193-202CA0AAD9A5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D314B4B6-FDBA-4C2F-B193-202CA0AAD9A5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D314B4B6-FDBA-4C2F-B193-202CA0AAD9A5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D314B4B6-FDBA-4C2F-B193-202CA0AAD9A5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
