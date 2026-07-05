@@ -6,6 +6,7 @@ PayVelix Client is a .NET 8 SDK for integrating applications with the PayVelix p
 
 - Create payments through `/api/Payments/Create`
 - Verify payments through `/api/Payments/{paymentId}/Verify`
+- Get balance through `/api/Balance?id=`
 - Send the API key with the `X-Api-Key` header
 - Serialize and deserialize JSON with camelCase property names
 - Preserve unknown response fields in `AdditionalData`
@@ -77,12 +78,13 @@ Example `appsettings.json`:
 
 ## SDK Usage
 
-Inject `IPayVelixClient` into your service after registering `AddPayVelix`. Payment operations are exposed through `payVelix.Payments`.
+Inject `IPayVelixClient` into your service after registering `AddPayVelix`. Payment operations are exposed through `payVelix.Payments`, and balance operations are exposed through `payVelix.Balance`.
 
 | Method | Purpose |
 | --- | --- |
 | `CreateAsync(CreatePaymentRequest request, CancellationToken cancellationToken = default)` | Creates a payment and returns the payment identifier, amount, payment link, and expiration time. |
 | `VerifyAsync(string paymentId, CancellationToken cancellationToken = default)` | Verifies an existing payment and returns its current status, paid amount, fees, currency, and network details. |
+| `GetAsync(string? id = null, CancellationToken cancellationToken = default)` | Gets balances by currency and the total USD equivalent through `/api/Balance?id=`. |
 
 ## Create a Payment
 
@@ -175,6 +177,52 @@ public sealed class PaymentVerificationService
 
 Compare `VerifyPaymentResponse.Status` with `PaymentStatus.Paid.ToString()` when you need to confirm that the payment has been completed.
 
+## Get Balance
+
+Use `GetAsync` when your application needs to read the current balance.
+
+```csharp
+Task<BalanceResponse> GetAsync(
+    string? id = null,
+    CancellationToken cancellationToken = default);
+```
+
+```csharp
+using PayVelix;
+using PayVelix.Contracts.Balance;
+
+public sealed class BalanceService
+{
+    private readonly IPayVelixClient _payVelix;
+
+    public BalanceService(IPayVelixClient payVelix)
+    {
+        _payVelix = payVelix;
+    }
+
+    public async Task<BalanceResponse> GetBalanceAsync(
+        string? id = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await _payVelix.Balance.GetAsync(id, cancellationToken);
+    }
+}
+```
+
+When `id` is null or empty, the SDK calls `/api/Balance?id=`. When an `id` is provided, it is URL-escaped before being sent.
+
+Successful responses are deserialized into `BalanceResponse`:
+
+```json
+{
+  "currencies": {
+    "BTC": 0.1,
+    "USDT": 25.5
+  },
+  "usdEquivalent": 1025.5
+}
+```
+
 ## Models
 
 ### `CreatePaymentRequest`
@@ -211,6 +259,14 @@ Compare `VerifyPaymentResponse.Status` with `PaymentStatus.Paid.ToString()` when
 | `Network` | `string?` |
 | `Status` | `string?` |
 | `ExpiresAt` | `DateTimeOffset?` |
+| `AdditionalData` | `Dictionary<string, JsonElement>?` |
+
+### `BalanceResponse`
+
+| Property | Type |
+| --- | --- |
+| `Currencies` | `Dictionary<string, decimal>?` |
+| `UsdEquivalent` | `decimal` |
 | `AdditionalData` | `Dictionary<string, JsonElement>?` |
 
 ## Error Handling
@@ -255,6 +311,7 @@ dotnet test .\PayVelix\PayVelix.sln
 ## Implementation Notes
 
 - `IPayVelixClient` is registered as scoped.
+- `IPayVelixBalanceClient` is registered with `AddHttpClient`.
 - `IPayVelixPaymentsClient` is registered with `AddHttpClient`.
 - `Accept: application/json` is added automatically.
 - `X-Api-Key` is built from `PayVelixOptions.ApiKey`.
