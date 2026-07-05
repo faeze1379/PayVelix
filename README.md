@@ -17,7 +17,6 @@ PayVelix Client is a .NET 8 SDK for integrating applications with the PayVelix p
 PayVelix.Client/
 |- PayVelix/              # Main client, DI setup, and HTTP implementation
 |- PayVelix.Contracts/    # DTOs, enums, and shared exceptions
-|- PayVelix.SandboxConsole/ # Manual sandbox smoke-test console app
 |- PayVelix.Tests/        # xUnit tests
 `- README.md
 ```
@@ -70,58 +69,30 @@ Example `appsettings.json`:
 ```json
 {
   "PayVelix": {
-    "ApiKey": "pv_sandbox_test_key",
+    "ApiKey": "your_api_key",
     "BaseUrl": "https://api.payvelix.com"
   }
 }
 ```
 
-## Sandbox Console Manual Test
+## SDK Usage
 
-The repository includes `PayVelix.SandboxConsole`, a small console app for manually testing a sandbox API key against the PayVelix API. It creates a test payment and can immediately verify the returned `paymentId`.
+Inject `IPayVelixClient` into your service after registering `AddPayVelix`. Payment operations are exposed through `payVelix.Payments`.
 
-Set the API key as an environment variable so it is not stored in source code or shell history:
-
-```powershell
-$env:PAYVELIX_API_KEY = "your_sandbox_api_key"
-```
-
-Run the console app:
-
-```powershell
-dotnet run --project .\PayVelix.SandboxConsole
-```
-
-By default, the console app uses:
-
-| Setting | Environment variable | Default |
-| --- | --- | --- |
-| API key | `PAYVELIX_API_KEY` | Required |
-| Base URL | `PAYVELIX_BASE_URL` | `https://api.payvelix.com` |
-| Amount | `PAYVELIX_AMOUNT` | `1` |
-| Currency | `PAYVELIX_CURRENCY` | `USD` |
-| Return URL | `PAYVELIX_RETURN_URL` | `https://example.com/payvelix/return` |
-| Webhook URL | `PAYVELIX_WEBHOOK_URL` | Empty |
-
-You can also override values with command-line options:
-
-```powershell
-dotnet run --project .\PayVelix.SandboxConsole -- --amount 5 --currency USD --base-url https://api.payvelix.com
-```
-
-To create a payment without running the verification prompt:
-
-```powershell
-dotnet run --project .\PayVelix.SandboxConsole -- --skip-verify
-```
-
-To see all available options:
-
-```powershell
-dotnet run --project .\PayVelix.SandboxConsole -- --help
-```
+| Method | Purpose |
+| --- | --- |
+| `CreateAsync(CreatePaymentRequest request, CancellationToken cancellationToken = default)` | Creates a payment and returns the payment identifier, amount, payment link, and expiration time. |
+| `VerifyAsync(string paymentId, CancellationToken cancellationToken = default)` | Verifies an existing payment and returns its current status, paid amount, fees, currency, and network details. |
 
 ## Create a Payment
+
+Use `CreateAsync` when your application needs to start a new payment.
+
+```csharp
+Task<CreatePaymentResponse> CreateAsync(
+    CreatePaymentRequest request,
+    CancellationToken cancellationToken = default);
+```
 
 ```csharp
 using PayVelix;
@@ -159,7 +130,17 @@ public sealed class CheckoutService
 
 `Amount` must be greater than zero. Otherwise, `ArgumentException` is thrown.
 
+Store the returned `PaymentId` in your own order or transaction record. If the API returns a `PaymentLink`, redirect the customer to that URL to complete the payment.
+
 ## Verify a Payment
+
+Use `VerifyAsync` after a redirect, webhook, or background reconciliation job to fetch the latest payment state.
+
+```csharp
+Task<VerifyPaymentResponse> VerifyAsync(
+    string paymentId,
+    CancellationToken cancellationToken = default);
+```
 
 ```csharp
 using PayVelix;
@@ -191,6 +172,8 @@ public sealed class PaymentVerificationService
 ```
 
 `paymentId` must not be null, empty, or whitespace. Otherwise, `ArgumentException` is thrown.
+
+Compare `VerifyPaymentResponse.Status` with `PaymentStatus.Paid.ToString()` when you need to confirm that the payment has been completed.
 
 ## Models
 
