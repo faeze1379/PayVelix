@@ -303,9 +303,9 @@ The client supports both direct error responses such as `{"code":"...","message"
 ## Build and Test
 
 ```powershell
-dotnet restore .\PayVelix\PayVelix.sln
-dotnet build .\PayVelix\PayVelix.sln
-dotnet test .\PayVelix\PayVelix.sln
+dotnet restore .\PayVelix.sln
+dotnet build .\PayVelix.sln
+dotnet test .\PayVelix.sln
 ```
 
 ## Implementation Notes
