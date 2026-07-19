@@ -15,11 +15,11 @@ public sealed class CreatePaymentTests
     {
         using var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = JsonContent("""{"paymentId":"pay_123"}""")
+            Content = JsonContent(SuccessJson())
         });
         var client = CreateClient(handler);
 
-        await client.CreateAsync(new CreatePaymentRequest { Amount = 1 });
+        await client.CreateAsync(new CreatePaymentRequest { Amount = 1 }, "order_123");
 
         Assert.Equal(HttpMethod.Post, handler.Request?.Method);
         Assert.Equal("/api/Payments/Create", handler.Request?.RequestUri?.PathAndQuery);
@@ -30,7 +30,7 @@ public sealed class CreatePaymentTests
     {
         using var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = JsonContent("""{"paymentId":"pay_123"}""")
+            Content = JsonContent(SuccessJson())
         });
         var client = CreateClient(handler);
 
@@ -44,7 +44,7 @@ public sealed class CreatePaymentTests
             {
                 ["orderId"] = "order_1042"
             }
-        });
+        }, "order_1042");
 
         using var document = JsonDocument.Parse(handler.RequestBody);
         var root = document.RootElement;
@@ -56,6 +56,7 @@ public sealed class CreatePaymentTests
         Assert.True(root.TryGetProperty("callbackParams", out var callbackParams));
         Assert.True(callbackParams.TryGetProperty("orderId", out _));
         Assert.False(root.TryGetProperty("ReturnUrl", out _));
+        Assert.False(root.TryGetProperty("idempotencyKey", out _));
     }
 
     [Theory]
@@ -65,12 +66,25 @@ public sealed class CreatePaymentTests
     {
         using var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = JsonContent("""{"paymentId":"pay_123"}""")
+            Content = JsonContent(SuccessJson())
         });
         var client = CreateClient(handler);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             client.CreateAsync(new CreatePaymentRequest { Amount = amount }));
+    }
+
+    [Fact]
+    public async Task CreateAsync_ThrowsArgumentExceptionWhenIdempotencyKeyIsMissing()
+    {
+        using var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = JsonContent("""{"paymentId":"123e4567-e89b-12d3-a456-426614174000"}""")
+        });
+        var client = CreateClient(handler);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.CreateAsync(new CreatePaymentRequest { Amount = 1 }));
     }
 
     [Fact]
@@ -83,7 +97,7 @@ public sealed class CreatePaymentTests
                 {
                     "paymentId": "123e4567-e89b-12d3-a456-426614174000",
                     "amount": 1,
-                    "paymentLink": null,
+                    "paymentLink": "https://checkout.payvelix.com/123e4567-e89b-12d3-a456-426614174000",
                     "expiresAt": "2026-07-04T10:50:05.092Z",
                     "providerTraceId": "trace_456"
                 }
@@ -91,11 +105,11 @@ public sealed class CreatePaymentTests
         });
         var client = CreateClient(handler);
 
-        var response = await client.CreateAsync(new CreatePaymentRequest { Amount = 1 });
+        var response = await client.CreateAsync(new CreatePaymentRequest { Amount = 1 }, "order_123");
 
-        Assert.Equal("123e4567-e89b-12d3-a456-426614174000", response.PaymentId);
+        Assert.Equal(Guid.Parse("123e4567-e89b-12d3-a456-426614174000"), response.PaymentId);
         Assert.Equal(1, response.Amount);
-        Assert.Null(response.PaymentLink);
+        Assert.Equal("https://checkout.payvelix.com/123e4567-e89b-12d3-a456-426614174000", response.PaymentLink);
         Assert.Equal(DateTimeOffset.Parse("2026-07-04T10:50:05.092Z"), response.ExpiresAt);
         Assert.NotNull(response.AdditionalData);
         Assert.True(response.AdditionalData.ContainsKey("providerTraceId"));
@@ -111,7 +125,7 @@ public sealed class CreatePaymentTests
         var client = CreateClient(handler);
 
         var exception = await Assert.ThrowsAsync<PayVelixApiException>(() =>
-            client.CreateAsync(new CreatePaymentRequest { Amount = 1 }));
+            client.CreateAsync(new CreatePaymentRequest { Amount = 1 }, "order_123"));
 
         Assert.Equal(HttpStatusCode.BadRequest, exception.StatusCode);
         Assert.Equal("invalid_amount", exception.ErrorCode);
@@ -129,7 +143,7 @@ public sealed class CreatePaymentTests
         var client = CreateClient(handler);
 
         var exception = await Assert.ThrowsAsync<PayVelixApiException>(() =>
-            client.CreateAsync(new CreatePaymentRequest { Amount = 1 }));
+            client.CreateAsync(new CreatePaymentRequest { Amount = 1 }, "order_123"));
 
         Assert.Equal(responseBody, exception.ResponseBody);
     }
@@ -139,7 +153,7 @@ public sealed class CreatePaymentTests
     {
         using var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = JsonContent("""{"paymentId":"pay_123"}""")
+            Content = JsonContent(SuccessJson())
         });
         var services = new ServiceCollection();
 
@@ -154,11 +168,13 @@ public sealed class CreatePaymentTests
         using var serviceProvider = services.BuildServiceProvider();
         var payVelix = serviceProvider.GetRequiredService<IPayVelixClient>();
 
-        await payVelix.Payments.CreateAsync(new CreatePaymentRequest { Amount = 1 });
+        await payVelix.Payments.CreateAsync(new CreatePaymentRequest { Amount = 1 }, "order_123");
 
         Assert.NotNull(handler.Request);
         Assert.True(handler.Request.Headers.TryGetValues("X-Api-Key", out var values));
         Assert.Equal("pv_sandbox_test_key", Assert.Single(values));
+        Assert.True(handler.Request.Headers.TryGetValues("Idempotency-Key", out var idempotencyValues));
+        Assert.Equal("order_123", Assert.Single(idempotencyValues));
     }
 
     [Fact]
@@ -181,7 +197,7 @@ public sealed class CreatePaymentTests
         var client = CreateClient(handler);
 
         var exception = await Assert.ThrowsAsync<PayVelixApiException>(() =>
-            client.CreateAsync(new CreatePaymentRequest { Amount = 1 }));
+            client.CreateAsync(new CreatePaymentRequest { Amount = 1 }, "order_123"));
 
         Assert.Equal(HttpStatusCode.BadRequest, exception.StatusCode);
         Assert.Equal("invalid_request", exception.ErrorCode);
@@ -201,6 +217,18 @@ public sealed class CreatePaymentTests
     private static StringContent JsonContent(string json)
     {
         return new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+    }
+
+    private static string SuccessJson()
+    {
+        return """
+        {
+            "paymentId": "123e4567-e89b-12d3-a456-426614174000",
+            "amount": 1,
+            "paymentLink": "https://checkout.payvelix.com/123e4567-e89b-12d3-a456-426614174000",
+            "expiresAt": "2026-07-04T10:50:05.092Z"
+        }
+        """;
     }
 
     private sealed class FakeHttpMessageHandler : HttpMessageHandler

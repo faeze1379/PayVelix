@@ -5,13 +5,13 @@ namespace PayVelix.Contracts.Payments;
 
 public sealed class CreatePaymentResponse
 {
-    public string? PaymentId { get; set; }
+    public Guid PaymentId { get; set; }
 
     public decimal Amount { get; set; }
 
-    public string? PaymentLink { get; set; }
+    public string PaymentLink { get; set; } = string.Empty;
 
-    public DateTimeOffset? ExpiresAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalData { get; set; }

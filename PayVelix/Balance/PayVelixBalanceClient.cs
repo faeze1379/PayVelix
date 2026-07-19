@@ -16,7 +16,9 @@ internal sealed class PayVelixBalanceClient : IPayVelixBalanceClient
         string? id = null,
         CancellationToken cancellationToken = default)
     {
-        var path = $"/api/Balance?id={Uri.EscapeDataString(id ?? string.Empty)}";
+        var path = string.IsNullOrWhiteSpace(id)
+            ? "/api/Balance"
+            : $"/api/Balance?id={Uri.EscapeDataString(id)}";
 
         using var response = await _httpClient.GetAsync(path, cancellationToken);
 

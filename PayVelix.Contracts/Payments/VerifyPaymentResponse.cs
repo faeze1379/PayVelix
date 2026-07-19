@@ -5,7 +5,7 @@ namespace PayVelix.Contracts.Payments;
 
 public sealed class VerifyPaymentResponse
 {
-    public string? PaymentId { get; set; }
+    public Guid PaymentId { get; set; }
 
     public decimal Amount { get; set; }
 
@@ -21,9 +21,9 @@ public sealed class VerifyPaymentResponse
 
     public string? Network { get; set; }
 
-    public string? Status { get; set; }
+    public VerifyPaymentStatus Status { get; set; }
 
-    public DateTimeOffset? ExpiresAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalData { get; set; }

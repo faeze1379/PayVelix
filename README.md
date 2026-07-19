@@ -6,7 +6,8 @@ PayVelix Client is a .NET 8 SDK for integrating applications with the PayVelix p
 
 - Create payments through `/api/Payments/Create`
 - Verify payments through `/api/Payments/{paymentId}/Verify`
-- Get balance through `/api/Balance?id=`
+- Get balance through `/api/Balance`
+- Send the idempotency key for payment creation with the `Idempotency-Key` header
 - Send the API key with the `X-Api-Key` header
 - Serialize and deserialize JSON with camelCase property names
 - Preserve unknown response fields in `AdditionalData`
@@ -82,9 +83,11 @@ Inject `IPayVelixClient` into your service after registering `AddPayVelix`. Paym
 
 | Method | Purpose |
 | --- | --- |
-| `CreateAsync(CreatePaymentRequest request, CancellationToken cancellationToken = default)` | Creates a payment and returns the payment identifier, amount, payment link, and expiration time. |
+| `CreateAsync(CreatePaymentRequest request, CancellationToken cancellationToken = default)` | Creates a payment using `request.IdempotencyKey` and returns the payment identifier, amount, payment link, and expiration time. |
+| `CreateAsync(CreatePaymentRequest request, string idempotencyKey, CancellationToken cancellationToken = default)` | Creates a payment using an explicit idempotency key. |
 | `VerifyAsync(string paymentId, CancellationToken cancellationToken = default)` | Verifies an existing payment and returns its current status, paid amount, fees, currency, and network details. |
-| `GetAsync(string? id = null, CancellationToken cancellationToken = default)` | Gets balances by currency and the total USD equivalent through `/api/Balance?id=`. |
+| `VerifyAsync(Guid paymentId, CancellationToken cancellationToken = default)` | Verifies an existing payment by GUID. |
+| `GetAsync(string? id = null, CancellationToken cancellationToken = default)` | Gets balances by currency and the total USD equivalent through `/api/Balance`. |
 
 ## Create a Payment
 
@@ -93,6 +96,11 @@ Use `CreateAsync` when your application needs to start a new payment.
 ```csharp
 Task<CreatePaymentResponse> CreateAsync(
     CreatePaymentRequest request,
+    CancellationToken cancellationToken = default);
+
+Task<CreatePaymentResponse> CreateAsync(
+    CreatePaymentRequest request,
+    string idempotencyKey,
     CancellationToken cancellationToken = default);
 ```
 
@@ -116,6 +124,7 @@ public sealed class CheckoutService
         return await _payVelix.Payments.CreateAsync(
             new CreatePaymentRequest
             {
+                IdempotencyKey = orderId,
                 Amount = 25.50m,
                 Currency = "USD",
                 ReturnUrl = $"https://example.com/payments/return?orderId={orderId}",
@@ -131,6 +140,7 @@ public sealed class CheckoutService
 ```
 
 `Amount` must be greater than zero. Otherwise, `ArgumentException` is thrown.
+`IdempotencyKey` must be provided either on the request or through the explicit overload. Reusing the same key for a retried create-payment request returns the same payment instead of creating a duplicate.
 
 Store the returned `PaymentId` in your own order or transaction record. If the API returns a `PaymentLink`, redirect the customer to that URL to complete the payment.
 
@@ -165,17 +175,14 @@ public sealed class PaymentVerificationService
             paymentId,
             cancellationToken);
 
-        return string.Equals(
-            payment.Status,
-            PaymentStatus.Paid.ToString(),
-            StringComparison.OrdinalIgnoreCase);
+        return payment.Status == VerifyPaymentStatus.Paid;
     }
 }
 ```
 
 `paymentId` must not be null, empty, or whitespace. Otherwise, `ArgumentException` is thrown.
 
-Compare `VerifyPaymentResponse.Status` with `PaymentStatus.Paid.ToString()` when you need to confirm that the payment has been completed.
+Compare `VerifyPaymentResponse.Status` with `VerifyPaymentStatus.Paid` when you need to confirm that the payment has been completed.
 
 ## Get Balance
 
@@ -209,7 +216,7 @@ public sealed class BalanceService
 }
 ```
 
-When `id` is null or empty, the SDK calls `/api/Balance?id=`. When an `id` is provided, it is URL-escaped before being sent.
+When `id` is null or empty, the SDK calls `/api/Balance`. When an `id` is provided, it calls `/api/Balance?id={value}` with the value URL-escaped before being sent.
 
 Successful responses are deserialized into `BalanceResponse`:
 
@@ -229,9 +236,10 @@ Successful responses are deserialized into `BalanceResponse`:
 
 | Property | Type | Description |
 | --- | --- | --- |
+| `IdempotencyKey` | `string?` | Required for create-payment calls unless passed to the explicit overload. Sent as the `Idempotency-Key` header, not in the JSON body. |
 | `ReturnUrl` | `string?` | URL where the customer is redirected after payment. |
 | `Amount` | `decimal` | Payment amount. Must be greater than zero. |
-| `Currency` | `string?` | Currency code. |
+| `Currency` | `string` | Currency code. Defaults to `USDT`. |
 | `WebhookUrl` | `string?` | URL that receives PayVelix webhook callbacks. |
 | `CallbackParams` | `Dictionary<string, string>?` | Custom parameters for tracking orders or callback context. |
 
@@ -239,17 +247,17 @@ Successful responses are deserialized into `BalanceResponse`:
 
 | Property | Type |
 | --- | --- |
-| `PaymentId` | `string?` |
+| `PaymentId` | `Guid` |
 | `Amount` | `decimal` |
-| `PaymentLink` | `string?` |
-| `ExpiresAt` | `DateTimeOffset?` |
+| `PaymentLink` | `string` |
+| `ExpiresAt` | `DateTimeOffset` |
 | `AdditionalData` | `Dictionary<string, JsonElement>?` |
 
 ### `VerifyPaymentResponse`
 
 | Property | Type |
 | --- | --- |
-| `PaymentId` | `string?` |
+| `PaymentId` | `Guid` |
 | `Amount` | `decimal` |
 | `PaidAmount` | `decimal` |
 | `FeeAmount` | `decimal` |
@@ -257,8 +265,8 @@ Successful responses are deserialized into `BalanceResponse`:
 | `MerchantReceivableAmount` | `decimal` |
 | `Currency` | `string?` |
 | `Network` | `string?` |
-| `Status` | `string?` |
-| `ExpiresAt` | `DateTimeOffset?` |
+| `Status` | `VerifyPaymentStatus` |
+| `ExpiresAt` | `DateTimeOffset` |
 | `AdditionalData` | `Dictionary<string, JsonElement>?` |
 
 ### `BalanceResponse`
@@ -315,4 +323,5 @@ dotnet test .\PayVelix.sln
 - `IPayVelixPaymentsClient` is registered with `AddHttpClient`.
 - `Accept: application/json` is added automatically.
 - `X-Api-Key` is built from `PayVelixOptions.ApiKey`.
+- `Idempotency-Key` is required for payment creation.
 - Empty or invalid successful API responses are converted to `PayVelixApiException`.

@@ -20,7 +20,7 @@ public sealed class BalanceTests
         await client.GetAsync();
 
         Assert.Equal(HttpMethod.Get, handler.Request?.Method);
-        Assert.Equal("/api/Balance?id=", handler.Request?.RequestUri?.PathAndQuery);
+        Assert.Equal("/api/Balance", handler.Request?.RequestUri?.PathAndQuery);
     }
 
     [Fact]

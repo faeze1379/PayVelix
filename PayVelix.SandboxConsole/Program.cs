@@ -29,6 +29,7 @@ var orderId = $"manual-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}";
 
 var request = new CreatePaymentRequest
 {
+    IdempotencyKey = orderId,
     Amount = amount,
     Currency = currency,
     ReturnUrl = returnUrl,
@@ -53,7 +54,7 @@ try
     Console.WriteLine("Create payment succeeded.");
     PrintCreateResponse(createResponse);
 
-    if (!skipVerify && !string.IsNullOrWhiteSpace(createResponse.PaymentId))
+    if (!skipVerify && createResponse.PaymentId != Guid.Empty)
     {
         Console.WriteLine();
         Console.Write("Verify this payment now? [Y/n]: ");
@@ -248,16 +249,16 @@ static string ReadSecret()
 
 static void PrintCreateResponse(CreatePaymentResponse response)
 {
-    Console.WriteLine($"Payment ID: {response.PaymentId ?? "(empty)"}");
+    Console.WriteLine($"Payment ID: {response.PaymentId}");
     Console.WriteLine($"Amount: {response.Amount.ToString(CultureInfo.InvariantCulture)}");
-    Console.WriteLine($"Payment link: {response.PaymentLink ?? "(empty)"}");
-    Console.WriteLine($"Expires at: {response.ExpiresAt?.ToString("O", CultureInfo.InvariantCulture) ?? "(empty)"}");
+    Console.WriteLine($"Payment link: {response.PaymentLink}");
+    Console.WriteLine($"Expires at: {response.ExpiresAt.ToString("O", CultureInfo.InvariantCulture)}");
 }
 
 static void PrintVerifyResponse(VerifyPaymentResponse response)
 {
-    Console.WriteLine($"Payment ID: {response.PaymentId ?? "(empty)"}");
-    Console.WriteLine($"Status: {response.Status ?? "(empty)"}");
+    Console.WriteLine($"Payment ID: {response.PaymentId}");
+    Console.WriteLine($"Status: {response.Status}");
     Console.WriteLine($"Amount: {response.Amount.ToString(CultureInfo.InvariantCulture)}");
     Console.WriteLine($"Paid amount: {response.PaidAmount.ToString(CultureInfo.InvariantCulture)}");
     Console.WriteLine($"Fee amount: {response.FeeAmount.ToString(CultureInfo.InvariantCulture)}");
@@ -265,7 +266,7 @@ static void PrintVerifyResponse(VerifyPaymentResponse response)
     Console.WriteLine($"Merchant receivable amount: {response.MerchantReceivableAmount.ToString(CultureInfo.InvariantCulture)}");
     Console.WriteLine($"Currency: {response.Currency ?? "(empty)"}");
     Console.WriteLine($"Network: {response.Network ?? "(empty)"}");
-    Console.WriteLine($"Expires at: {response.ExpiresAt?.ToString("O", CultureInfo.InvariantCulture) ?? "(empty)"}");
+    Console.WriteLine($"Expires at: {response.ExpiresAt.ToString("O", CultureInfo.InvariantCulture)}");
 }
 
 static void PrintUsage()

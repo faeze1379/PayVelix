@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using PayVelix.Contracts.Common;
 
 namespace PayVelix.Internal;
@@ -9,7 +10,8 @@ internal static class PayVelixHttp
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
     };
 
     public static T DeserializeSuccessResponse<T>(

@@ -24,20 +24,18 @@ public sealed class VerifyPaymentTests
     }
 
     [Fact]
-    public async Task VerifyAsync_UriEscapesPaymentId()
+    public async Task VerifyAsync_GuidOverloadSendsGetToVerifyPaymentEndpoint()
     {
-        const string paymentId = "pay id/with+symbols?";
+        var paymentId = Guid.Parse("123e4567-e89b-12d3-a456-426614174000");
         using var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = JsonContent(SuccessJson(paymentId))
+            Content = JsonContent(SuccessJson(paymentId.ToString("D")))
         });
         var client = CreateClient(handler);
 
         await client.VerifyAsync(paymentId);
 
-        Assert.Equal(
-            "/api/Payments/pay%20id%2Fwith%2Bsymbols%3F/Verify",
-            handler.Request?.RequestUri?.PathAndQuery);
+        Assert.Equal($"/api/Payments/{paymentId:D}/Verify", handler.Request?.RequestUri?.PathAndQuery);
     }
 
     [Theory]
@@ -48,12 +46,25 @@ public sealed class VerifyPaymentTests
     {
         using var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = JsonContent(SuccessJson("pay_123"))
+            Content = JsonContent(SuccessJson("123e4567-e89b-12d3-a456-426614174000"))
         });
         var client = CreateClient(handler);
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             client.VerifyAsync(paymentId!));
+    }
+
+    [Fact]
+    public async Task VerifyAsync_ThrowsArgumentExceptionWhenPaymentIdIsNotGuid()
+    {
+        using var handler = new FakeHttpMessageHandler(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = JsonContent(SuccessJson("123e4567-e89b-12d3-a456-426614174000"))
+        });
+        var client = CreateClient(handler);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            client.VerifyAsync("not-a-guid"));
     }
 
     [Fact]
@@ -83,7 +94,7 @@ public sealed class VerifyPaymentTests
 
         var response = await client.VerifyAsync(paymentId);
 
-        Assert.Equal(paymentId, response.PaymentId);
+        Assert.Equal(Guid.Parse(paymentId), response.PaymentId);
         Assert.Equal(1, response.Amount);
         Assert.Equal(1, response.PaidAmount);
         Assert.Equal(1, response.FeeAmount);
@@ -91,7 +102,7 @@ public sealed class VerifyPaymentTests
         Assert.Equal(1, response.MerchantReceivableAmount);
         Assert.Null(response.Currency);
         Assert.Null(response.Network);
-        Assert.Equal("Pending", response.Status);
+        Assert.Equal(VerifyPaymentStatus.Pending, response.Status);
         Assert.Equal(DateTimeOffset.Parse("2026-07-02T12:06:36.695Z"), response.ExpiresAt);
         Assert.NotNull(response.AdditionalData);
         Assert.True(response.AdditionalData.ContainsKey("providerTraceId"));
@@ -107,7 +118,7 @@ public sealed class VerifyPaymentTests
         var client = CreateClient(handler);
 
         var exception = await Assert.ThrowsAsync<PayVelixApiException>(() =>
-            client.VerifyAsync("pay_123"));
+            client.VerifyAsync(Guid.NewGuid()));
 
         Assert.Equal(HttpStatusCode.Unauthorized, exception.StatusCode);
     }
@@ -122,7 +133,7 @@ public sealed class VerifyPaymentTests
         var client = CreateClient(handler);
 
         var exception = await Assert.ThrowsAsync<PayVelixApiException>(() =>
-            client.VerifyAsync("pay_123"));
+            client.VerifyAsync(Guid.NewGuid()));
 
         Assert.Equal(HttpStatusCode.NotFound, exception.StatusCode);
     }
@@ -138,7 +149,7 @@ public sealed class VerifyPaymentTests
         var client = CreateClient(handler);
 
         var exception = await Assert.ThrowsAsync<PayVelixApiException>(() =>
-            client.VerifyAsync("pay_123"));
+            client.VerifyAsync(Guid.NewGuid()));
 
         Assert.Equal(responseBody, exception.ResponseBody);
     }
@@ -153,7 +164,7 @@ public sealed class VerifyPaymentTests
         var client = CreateClient(handler);
 
         var exception = await Assert.ThrowsAsync<PayVelixApiException>(() =>
-            client.VerifyAsync("pay_123"));
+            client.VerifyAsync(Guid.NewGuid()));
 
         Assert.Equal("not_found", exception.ErrorCode);
     }
@@ -168,7 +179,7 @@ public sealed class VerifyPaymentTests
         var client = CreateClient(handler);
 
         var exception = await Assert.ThrowsAsync<PayVelixApiException>(() =>
-            client.VerifyAsync("pay_123"));
+            client.VerifyAsync(Guid.NewGuid()));
 
         Assert.Equal("Payment was not found.", exception.Message);
     }
